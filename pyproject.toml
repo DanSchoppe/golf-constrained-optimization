@@ -5,8 +5,9 @@ description = ""
 authors = []
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "3.9"
 ortools = "^9.0.9048"
+numpy = "^1.21.2"
 
 [tool.poetry.dev-dependencies]
 
