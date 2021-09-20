@@ -133,15 +133,30 @@ def main():
         ) == 1
       )
 
-  # Never ride with someone twice
+  # Ride with others <=1, with some hard constraints:
   for golfer1, golfer2 in golferCombinations:
-    model.Add(
-      sum(ridingTogether[(golfer1, golfer2, round, team, cart)]
-       for round in rounds
-       for team in teams
-       for cart in carts
-      ) <= 1
-    )
+    if (
+        ('Kent' in [golfer1, golfer2] and 'Reid' in [golfer1, golfer2]) or
+        ('Dan' in [golfer1, golfer2] and 'Reid' in [golfer1, golfer2]) or
+        ('Erik' in [golfer1, golfer2] and 'Jeff' in [golfer1, golfer2]) or
+        ('Erik' in [golfer1, golfer2] and 'Jay' in [golfer1, golfer2]) or
+        ('Jeff' in [golfer1, golfer2] and 'Jay' in [golfer1, golfer2])
+    ):
+      model.Add(
+        sum(ridingTogether[(golfer1, golfer2, round, team, cart)]
+          for round in rounds
+          for team in teams
+          for cart in carts
+        ) == 1
+      )
+    else:
+      model.Add(
+        sum(ridingTogether[(golfer1, golfer2, round, team, cart)]
+          for round in rounds
+          for team in teams
+          for cart in carts
+        ) <= 1
+      )
 
   # Never team with someone four times
   for golfer1, golfer2 in golferCombinations:
