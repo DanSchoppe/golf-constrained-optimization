@@ -1,5 +1,6 @@
 import sys
 from itertools import combinations
+import json
 
 from ortools.sat.python import cp_model
 import numpy as np
@@ -8,13 +9,15 @@ from golferInfo import golferInfo
 def main():
   games = ['Wolf', 'Small Scramble', 'Yellow Ball', 'Large Scramble', 'Individual']
   rounds = range(len(games))
-  teams = range(3)
+  teams = range(4)
   carts = range(2)
+  teamSizes = [3, 3, 3, 4]
 
   # Carts are double occupancy except:
   singleOccupancyCarts = [
     { 'team': 0, 'cart': 1 },
-    { 'team': 1, 'cart': 1 }
+    { 'team': 1, 'cart': 1 },
+    { 'team': 2, 'cart': 1 },
   ]
 
   golfers = [golfer['name'] for golfer in golferInfo]
@@ -107,9 +110,8 @@ def main():
         ) == size
       )
 
-  setTeamSize(team=0, size=3)
-  setTeamSize(team=1, size=3)
-  setTeamSize(team=2, size=4)
+  for team, size in enumerate(teamSizes):
+    setTeamSize(team, size)
 
   # Define how many riders are in each cart:
   def setCartOccupancy(team, cart, occupancy):
@@ -140,13 +142,16 @@ def main():
   # Ride with others <=1, with some hard constraints:
   for golfer1, golfer2 in golferCombinations:
     if (
-        ('Kent' in [golfer1, golfer2] and 'Reid' in [golfer1, golfer2]) or
-        ('Dan' in [golfer1, golfer2] and 'Reid' in [golfer1, golfer2]) or
+        ('Reid' in [golfer1, golfer2] and 'Kent' in [golfer1, golfer2]) or
+        ('Reid' in [golfer1, golfer2] and 'Dan' in [golfer1, golfer2]) or
         ('Bob' in [golfer1, golfer2] and 'Jon H' in [golfer1, golfer2]) or
         ('Bob' in [golfer1, golfer2] and 'Dan' in [golfer1, golfer2]) or
         ('Jon H' in [golfer1, golfer2] and 'Dan' in [golfer1, golfer2]) or
-        ('Erik' in [golfer1, golfer2] and 'Jay' in [golfer1, golfer2]) or
-        ('Jon D' in [golfer1, golfer2] and 'James' in [golfer1, golfer2])
+        ('Jay' in [golfer1, golfer2] and 'Erik' in [golfer1, golfer2]) or
+        ('Jay' in [golfer1, golfer2] and 'Jeff' in [golfer1, golfer2]) or
+        ('Erik' in [golfer1, golfer2] and 'Jeff' in [golfer1, golfer2]) or
+        ('Jon D' in [golfer1, golfer2] and 'James' in [golfer1, golfer2]) or
+        ('Dan' in [golfer1, golfer2] and 'Brady' in [golfer1, golfer2])
     ):
       model.Add(
         sum(ridingTogether[(golfer1, golfer2, round, team, cart)]
@@ -164,12 +169,17 @@ def main():
         ) <= 1
       )
 
-  # Ride alone <=1:
+  # Ride alone between 1 and 2 times:
   for golfer in golfers:
     model.Add(
       sum(ridingAlone[(golfer, round)]
           for round in rounds
-      ) <= 1
+          ) >= 1
+    )
+    model.Add(
+      sum(ridingAlone[(golfer, round)]
+          for round in rounds
+      ) <= 2
     )
 
   # Don't team with someone too much:
@@ -205,26 +215,31 @@ def main():
   # solver.parameters.max_time_in_seconds = 100
   solver.Solve(model, cp_model.ObjectiveSolutionPrinter())
 
-  print()
-  print()
-  # Results:
-  results = np.zeros([len(rounds), len(teams), len(carts), 2], dtype="S10")
+  # Capture groupings in a dictionary for JSON output:
+  groupings = { 'rounds': [] }
   for round in rounds:
-    print()
-    print(f'Round {round} ({games[round]}):')
+    groupings['rounds'].append({ 'teams': [] })
     for team in teams:
-      print('  Team', team)
+      groupings['rounds'][round]['teams'].append({ 'carts': [] })
       for cart in carts:
+        groupings['rounds'][round]['teams'][team]['carts'].append([])
         riders = []
         for golfer in golfers:
           if solver.Value(cartAssignments[(golfer, round, team, cart)]) == 1:
             riders.append(golfer)
-        print('    ', ' + '.join(riders))
-        for i, rider in enumerate(riders):
-          results[round, team, cart, i] = rider
+            groupings['rounds'][round]['teams'][team]['carts'][cart].append(golfer)
 
+  # Print groupings:
   print()
-  # Times teaming and riding together:
+  for roundNum, round in enumerate(groupings['rounds']):
+    print(f'Round {roundNum + 1} ({games[roundNum]}):')
+    for teamNum, team in enumerate(round['teams']):
+      print(f'  Team {teamNum + 1}:')
+      for cartNum, riders in enumerate(team['carts']):
+        print('    ', ' + '.join(riders))
+
+  # Print player-by-player teaming and riding statistics:
+  print()
   for golfer1 in golfers:
     print()
     print(f'{golfer1}:')
@@ -251,16 +266,9 @@ def main():
       )
       print(f'\t{golfer2}\triding: {numRiding}, teamed: {numTeamed}')
 
-  print()
-  print()
-  # CSV output for scorecards:
-  np.savetxt(
-    sys.stdout.buffer,
-    results.astype(np.str_).flatten().reshape([5,12]).transpose(),
-    fmt='%s',
-    delimiter='\t'
-  )
-
+  # Write groupings to JSON file:
+  with open('groupings.json', 'w') as outfile:
+    json.dump(groupings, outfile, indent=2)
 
 if __name__ == '__main__':
   main()
